@@ -12,6 +12,23 @@
 #define KILO_VERSION "0.0.1"
 #define CTRL_KEY(k) ((k) & 0x1f)
 
+//enumarator to give int to the keys pressed in the editor
+enum editorKey{
+  //move cursor left right up down
+  ARROW_LEFT = 1000,
+  ARROW_RIGHT,
+  ARROW_UP,
+  ARROW_DOWN,
+  DEL_KEY,
+  //move cursor to edges of the screen fn arrow left or right
+  HOME_KEY,
+  END_KEY,
+  //move cursor top or botton fn arrow up or down
+  PAGE_UP,
+  PAGE_DOWN
+
+};
+
 //struct which wil contain the state of the editor
 struct editorConfig
 {
@@ -72,13 +89,55 @@ void enableRawMode() {
 }
 
 //this function waits for keypresses and returns them
-char editorReadKey(){
+int editorReadKey(){
   int nread;
   char c;
   while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
     if (nread == -1 && errno != EAGAIN) die("read");
   }
-  return c;
+  //check if key pressed had an escape sequence
+  if (c == '\x1b') {
+    char seq[3];
+    if (read(STDIN_FILENO, &seq[0], 1) != 1) return '\x1b';
+    if (read(STDIN_FILENO, &seq[1], 1) != 1) return '\x1b';
+
+    if (seq[0] == '[') {
+      if (seq[1] >= '0' && seq[1] <= '9') {
+        if (read(STDIN_FILENO, &seq[2], 1) != 1) return '\x1b';
+        if (seq[2] == '~') {
+          //make it possible to use page up and page down and also addes home key and end key
+          switch (seq[1]) {
+            case '1': return HOME_KEY;
+            case '3': return DEL_KEY;
+            case '4': return END_KEY;
+            case '5': return PAGE_UP;
+            case '6': return PAGE_DOWN;
+            case '7': return HOME_KEY;
+            case '8': return END_KEY;
+          }
+        }
+      }else{
+        //make it possible to use the arrow keys to move and not only wasd also added home key and end key
+        switch (seq[1]) {
+          case 'A': return ARROW_UP;
+          case 'B': return ARROW_DOWN;
+          case 'C': return ARROW_RIGHT;
+          case 'D': return ARROW_LEFT;
+          case 'H': return HOME_KEY;
+          case 'F': return END_KEY;
+        }
+      }
+    }else if (seq[0] == 'O')
+    {
+      switch (seq[1]) {
+        case 'H': return HOME_KEY;
+        case 'F': return END_KEY;
+      }
+    }
+    return '\x1b';
+  }else{
+    return c;
+  }
 }
 
 //this function is used to get the cursor position in case which we will use to get the terminal window screen size
@@ -143,27 +202,35 @@ void abFree(struct abuf *ab){
 }
 
 //function to process the cursor movement we will move with the wasd keys
-void editorMoveCursor(char key){
+void editorMoveCursor(int key){
   switch (key)
   {
-  case 'a':
-    E.cx--;
+  case ARROW_LEFT:
+    if(E.cx != 0){
+      E.cx--;
+    }
     break;
-    case 'd':
+    case ARROW_RIGHT:
+    if (E.cx != E.screencols - 1) {
       E.cx++;
+    }
     break;
-    case 'w':
+    case ARROW_UP:
+    if(E.cy != 0){
       E.cy--;
+    }
     break;
-    case 's':
+    case ARROW_DOWN:
+    if (E.cy != E.screenrows - 1) {
       E.cy++;
+    }
     break;
   }
 }
 
 //waits for a keypress and then handles the key press its used to map different key combinations and special keys to different functions of the vim, and also to insert andy printable keys to the edited text
 void editorProcessKeypress(){
-  char c = editorReadKey();
+  int c = editorReadKey();
   switch (c)
   {
     //quit
@@ -172,11 +239,44 @@ void editorProcessKeypress(){
     write(STDOUT_FILENO, "\x1b[H", 3);
     exit(0);
     break;
+      case HOME_KEY:
+        E.cx = 0;
+      break;
+      case END_KEY:
+        E.cx = E.screencols - 1;
+      break;
+    //page up and page down
+    case PAGE_UP:
+      {
+        int times = E.screenrows;
+        while (times--)
+        if (c == PAGE_UP)
+        {
+          editorMoveCursor(ARROW_UP);
+        }
+      }
+    break;
+    case PAGE_DOWN:
+      {
+        int times = E.screenrows;
+        while (times--)
+        if (c == PAGE_DOWN)
+        {
+          editorMoveCursor(ARROW_DOWN);
+        }
+      }
+    break;
     //move cursor
-    case 'w':
-    case 's':
-    case 'a':
-    case 'd':
+    case ARROW_UP:
+          editorMoveCursor(c);
+    break;
+    case ARROW_DOWN:
+          editorMoveCursor(c);
+    break;
+    case ARROW_LEFT:
+          editorMoveCursor(c);
+    break;
+    case ARROW_RIGHT:
       editorMoveCursor(c);
     break;
   }
