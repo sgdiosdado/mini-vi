@@ -496,13 +496,23 @@ void editorFindCallback(char *query, int key) {
   }
 }
 
-void editorFind() {
+void editorFind(char *query) {
   int saved_cx = E.cx;
   int saved_cy = E.cy;
   int saved_coloff = E.coloff;
   int saved_rowoff = E.rowoff;
 
-  char *query = editorPrompt("Search: %s (Use ESC/Arrows/Enter)", editorFindCallback);
+  while(1) {
+    editorSetStatusMessage("Searching (navigate with arrows): %s", query);
+    editorRefreshScreen();
+    int c = editorReadKey();
+    if (c == '\x1b' || c == '\r') {
+      // Cancels prompts
+      editorSetStatusMessage("");
+      return;
+    }
+    editorFindCallback(query, c);
+  }
 
   if (query) {
     free(query);
@@ -577,7 +587,7 @@ void editorDrawRows(struct abuf *ab) {
       if (E.numrows == 0 && y == E.screenrows / 3) {
         char welcome[80];
         int welcomelen = snprintf(welcome, sizeof(welcome),
-          "Kilo editor -- version %s", MVI_VERSION);
+          "Mini Vi editor -- version %s", MVI_VERSION);
         if (welcomelen > E.screencols) welcomelen = E.screencols;
         int padding = (E.screencols - welcomelen) / 2;
         if (padding) {
@@ -684,7 +694,7 @@ void editorSetStatusMessage(const char *fmt, ...) {
   E.statusmsg_time = time(NULL);
 }
 
-// Gets user input (used at saving files without an initial name)
+// Gets user input
 char *editorPrompt(char *prompt, void (*callback)(char *, int)) {
   size_t bufsize = 128;
   char *buf = malloc(bufsize);
@@ -833,7 +843,14 @@ void editorProcessCommand(char *command, char *option){
   if (strcmp(command, "q") == 0) {
     if (E.dirty && quit_times > 0) {
         editorSetStatusMessage("Wait! File has unsaved changes. Press :q! to force quit without saving.", quit_times);
-        return;
+        char* save = editorPrompt("You have unsaved changes. Do you want to save? (y | n): %s", NULL);
+        if (strcmp(save, "y") == 0 || strcmp(save, "Y") == 0) {
+          editorSave();
+        } else if (strcmp(save, "n") == 0 || strcmp(save, "N") == 0) {
+          write(STDOUT_FILENO, "\x1b[2J", 4);
+          write(STDOUT_FILENO, "\x1b[H", 3);
+          exit(0);
+        }
       }
       write(STDOUT_FILENO, "\x1b[2J", 4);
       write(STDOUT_FILENO, "\x1b[H", 3);
@@ -858,7 +875,7 @@ void editorProcessCommand(char *command, char *option){
   }
   // Find text
   else if (strcmp(command, "s") == 0) {
-    editorFind();
+    editorFind(option);
   }
   quit_times = MVI_QUIT_TIMES;
 }
@@ -976,7 +993,8 @@ int main(int argc, char *argv[]) {
     editorOpen(argv[1]);
   }
 
-  editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = find");
+  editorSetStatusMessage("HELP: i for insert mode | :q to quit | :w to save | :s <token> to search");
+  
   while (1) {
     editorRefreshScreen();
     editorProcessKeypress();
