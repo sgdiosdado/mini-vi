@@ -680,14 +680,13 @@ void quitProgram() {
   exit(0);
 }
 
+//function to read the commands after the :
 void comandoPuntos(){
-  int isave = 0;
   char *opcion = editorPrompt(":%s");
   if (opcion) {
     if (strcmp(opcion, "q") == 0) {
-      printf("Quieres guardar tus cambios?\n 1 = si, 0 = no\n");
-      scanf("%d", &isave);
-      if (isave == 1)
+      char *save = editorPrompt("Quieres guardar tus cambios? %s (s = si, n = no)");
+      if (strcmp(save, "s") == 0)
       {
         editorSave();
         quitProgram();
@@ -817,7 +816,7 @@ int main(int argc, char *argv[]) {
     editorOpen(argv[1]);
   }
 
-  editorSetStatusMessage("HELP: Ctrl-S = save | Ctrl-Q = quit");
+  editorSetStatusMessage("HELP: :q = quit | :wq = quit and save");
 
   while (1) {
     editorRefreshScreen();
