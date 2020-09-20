@@ -458,6 +458,25 @@ void editorSave() {
   editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
+void countNumberTimes(){
+  char *count = editorPrompt("Count occurrances of: %s (ESC to cancel)", NULL);
+  if (count == NULL){
+    return;
+  }
+  int i;
+  int cont = 0;
+  for(i = 0; i < E.numrows; i++){
+    erow *row = &E.row[i];
+    char *word = row->render;
+    while(word = strstr(word, count)){
+      count++;
+      word++;
+    }
+  }
+  free(count);
+  editorSetStatusMessage("Your word was %d times", cont);
+}
+
 // Loop through all the rows of the file, and if a row contains their query string,
 // move the cursor to the match
 void editorFindCallback(char *query, int key) {
@@ -886,6 +905,9 @@ void editorProcessCommand(char *command, char *option){
   else if (strcmp(command, "n") == 0) {
     int line = atoi(option);
     editorGoToLine(line - 1);
+  }
+  else if (strcmp(command, "c") == 0) {
+    countNumberTimes();
   }
   quit_times = MVI_QUIT_TIMES;
 }
