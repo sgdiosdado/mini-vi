@@ -524,6 +524,11 @@ void editorFind(char *query) {
   }
 }
 
+void editorGoToLine(int line) {
+  if (line > E.numrows) line = E.numrows -1;
+  E.cy = line;
+}
+
 // We need to make a buffer for the text that is being written so we dont do small writes but one big write
 struct abuf {
   char *b;
@@ -877,6 +882,11 @@ void editorProcessCommand(char *command, char *option){
   else if (strcmp(command, "s") == 0) {
     editorFind(option);
   }
+  // Go to line
+  else if (strcmp(command, "n") == 0) {
+    int line = atoi(option);
+    editorGoToLine(line - 1);
+  }
   quit_times = MVI_QUIT_TIMES;
 }
 
@@ -994,7 +1004,7 @@ int main(int argc, char *argv[]) {
   }
 
   editorSetStatusMessage("HELP: i for insert mode | :q to quit | :w to save | :s <token> to search");
-  
+
   while (1) {
     editorRefreshScreen();
     editorProcessKeypress();
