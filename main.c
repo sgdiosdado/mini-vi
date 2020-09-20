@@ -74,6 +74,8 @@ struct editorConfig E;
 
 // Prototype
 void editorSetStatusMessage(const char *fmt, ...);
+void editorRefreshScreen();
+char *editorPrompt(char *prompt);
 
 // Prints an error message and exits the program and clears the screen
 void die(const char *s) {
@@ -402,8 +404,14 @@ void editorOpen(char *filename) {
 
 // Saves the open file
 void editorSave() {
-  // If file has no name then return without saving
-  if (E.filename == NULL) return;
+  // When file has no name execute prompt to read user input
+  if (E.filename == NULL) {
+    E.filename = editorPrompt("Save as: %s (ESC to cancel)");
+    if (E.filename == NULL) {
+      editorSetStatusMessage("Save aborted");
+      return;
+    }
+  }
   
   int len;
   char *buf = editorRowsToString(&len);
@@ -575,12 +583,52 @@ void editorRefreshScreen() {
   abFree(&ab);
 }
 
+// Sets the message for the status bar
 void editorSetStatusMessage(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(E.statusmsg, sizeof(E.statusmsg), fmt, ap);
   va_end(ap);
   E.statusmsg_time = time(NULL);
+}
+
+// Gets user input (used at saving files without an initial name)
+char *editorPrompt(char *prompt) {
+  size_t bufsize = 128;
+  char *buf = malloc(bufsize);
+  size_t buflen = 0;
+
+  buf[0] = '\0';
+
+  while (1) {
+    editorSetStatusMessage(prompt, buf);
+    editorRefreshScreen();
+    
+    int c = editorReadKey();
+    // Deletes character
+    if (c == DEL_KEY || c == CTRL_KEY('h') || c == BACKSPACE) {
+      if (buflen != 0) buf[--buflen] = '\0';
+    } else if (c == '\x1b') {
+      // Cancels prompts
+      editorSetStatusMessage("");
+      free(buf);
+      return NULL;
+    } else if (c == '\r') {
+      // Saves buffer (user input)
+      if (buflen != 0) {
+        editorSetStatusMessage("");
+        return buf;
+      }
+    } else if (!iscntrl(c) && c < 128) {
+      // Allocates more memory if it has reached max capacity and adds '\0' end char
+      if (buflen == bufsize - 1) {
+        bufsize *= 2;
+        buf = realloc(buf, bufsize);
+      }
+      buf[buflen++] = c;
+      buf[buflen] = '\0';
+    }
+  }
 }
 
 // Process the cursor movement we will move with the wasd keys
