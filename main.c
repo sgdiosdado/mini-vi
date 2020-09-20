@@ -467,10 +467,9 @@ void countNumberTimes(){
   int cont = 0;
   for(i = 0; i < E.numrows; i++){
     erow *row = &E.row[i];
-    char *word = row->render;
-    while(word = strstr(word, count)){
-      count++;
-      word++;
+    char *word = strstr(row->render, count);
+    if (word){
+      cont++;
     }
   }
   free(count);
