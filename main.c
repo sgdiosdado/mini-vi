@@ -19,7 +19,7 @@
 #define MVI_VERSION "0.0.1"
 #define MVI_TAB_STOP 8
 // Amount of quit presses to force quit without saving
-#define MVI_QUIT_TIMES 2
+#define MVI_QUIT_TIMES 1
 // Define the control key plus q to quit the operation
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -36,7 +36,11 @@ enum editorKey {
   HOME_KEY,
   END_KEY,
   PAGE_UP,
-  PAGE_DOWN
+  PAGE_DOWN,
+
+  // Modes
+  MODE_NORMAL,
+  MODE_INSERT
 };
 
 // Datatype for storing row of text in our editor
@@ -67,6 +71,7 @@ struct editorConfig {
   char *filename;
   char statusmsg[80];
   time_t statusmsg_time;
+  int mode;
   struct termios orig_termios;
 };
 
@@ -599,14 +604,31 @@ void editorDrawRows(struct abuf *ab) {
 // Shows information of the file and line the cursor is at
 void editorDrawStatusBar(struct abuf *ab) {
   abAppend(ab, "\x1b[7m", 4);
-  char status[80], rstatus[80];
-  int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
-    E.filename ? E.filename : "[No Name]", E.numrows,
-    E.dirty ? "(modified)" : "");
+  char status[80], rstatus[80], mode[10];
+
+  switch (E.mode) {
+  case MODE_INSERT:
+    strcpy(mode, "<INSERT>");
+    break;
+  default:
+    strcpy(mode, "<NORMAL>");
+    break;
+  }
+
+  int len = snprintf(
+      status,
+      sizeof(status),
+      "%.20s %.20s - %d lines %s",
+      mode,
+      E.filename ? E.filename : "[No Name]", E.numrows,
+      E.dirty ? "(modified)" : "");
+
   int rlen = snprintf(rstatus, sizeof(rstatus), "%d/%d",
     E.cy + 1, E.numrows);
+
   if (len > E.screencols) len = E.screencols;
   abAppend(ab, status, len);
+
   while (len < E.screencols) {
     if (E.screencols - len == rlen) {
       abAppend(ab, rstatus, rlen);
@@ -745,34 +767,11 @@ void editorMoveCursor(int key) {
   }
 }
 
-// Waits for a keypress and then handles the key press its used to map different key 
-// combinations and special keys to different functions of the vim, and also to insert and 
-// printable keys to the edited text
-void editorProcessKeypress() {
-  static int quit_times = MVI_QUIT_TIMES;
-
-  int c = editorReadKey();
-
+void editorProcessInsertKeypress(int c) {
   switch (c) {
     // Enter (CR)
     case '\r':
       editorInsertNewline();
-      break;
-    // Quit
-    case CTRL_KEY('q'):
-    if (E.dirty && quit_times > 0) {
-        editorSetStatusMessage("Oops... File has unsaved changes. You better save 'em "
-          "Press Ctrl-Q %d more times to quit.", quit_times);
-        quit_times--;
-        return;
-      }
-      write(STDOUT_FILENO, "\x1b[2J", 4);
-      write(STDOUT_FILENO, "\x1b[H", 3);
-      exit(0);
-      break;
-
-    case CTRL_KEY('s'):
-      editorSave();
       break;
 
     case HOME_KEY:
@@ -782,10 +781,6 @@ void editorProcessKeypress() {
     case END_KEY:
       if (E.cy < E.numrows)
         E.cx = E.row[E.cy].size;
-      break;
-
-    case CTRL_KEY('f'):
-      editorFind();
       break;
 
     case BACKSPACE:
@@ -823,13 +818,134 @@ void editorProcessKeypress() {
 
     case CTRL_KEY('l'):
     case '\x1b':
+      E.mode = MODE_NORMAL;
       break;
     
     default:
       editorInsertChar(c);
       break;
   }
+}
+
+void editorProcessCommand(char *command, char *option){
+  static int quit_times = MVI_QUIT_TIMES;
+  // Quit
+  if (strcmp(command, "q") == 0) {
+    if (E.dirty && quit_times > 0) {
+        editorSetStatusMessage("Wait! File has unsaved changes. Press :q! to force quit without saving.", quit_times);
+        return;
+      }
+      write(STDOUT_FILENO, "\x1b[2J", 4);
+      write(STDOUT_FILENO, "\x1b[H", 3);
+      exit(0);
+  }
+  // Force quit
+  else if (strcmp(command, "q!") == 0) {
+      write(STDOUT_FILENO, "\x1b[2J", 4);
+      write(STDOUT_FILENO, "\x1b[H", 3);
+      exit(0);
+  }
+  // Write
+  else if (strcmp(command, "w") == 0) {
+    editorSave();
+  }
+  //Write and quit
+  else if (strcmp(command, "wq") == 0) {
+    editorSave();
+    write(STDOUT_FILENO, "\x1b[2J", 4);
+    write(STDOUT_FILENO, "\x1b[H", 3);
+    exit(0);
+  }
+  // Find text
+  else if (strcmp(command, "s") == 0) {
+    editorFind();
+  }
   quit_times = MVI_QUIT_TIMES;
+}
+
+void editorProcessNormalKeypress(int c) {
+  static int quit_times = MVI_QUIT_TIMES;
+  char* command = NULL;
+
+  switch (c) {
+    // Quit
+    case 58:
+      command = strtok(editorPrompt(":%s", NULL), " ");
+      char* options = strtok(NULL, " ");
+      editorProcessCommand(command, options);
+      break;
+
+    case HOME_KEY:
+      E.cx = 0;
+      break;
+
+    case END_KEY:
+      if (E.cy < E.numrows)
+        E.cx = E.row[E.cy].size;
+      break;
+
+    case BACKSPACE:
+    case CTRL_KEY('h'):
+    case DEL_KEY:
+      // Deletes the character to the right
+      if (c == DEL_KEY) editorMoveCursor(ARROW_RIGHT);
+      // Deletes the character at cursor
+      editorDelChar();
+      break;
+
+    // Move by pages
+    case PAGE_UP:
+    case PAGE_DOWN:
+      {
+        if (c == PAGE_UP) {
+          E.cy = E.rowoff;
+        } else if (c == PAGE_DOWN) {
+          E.cy = E.rowoff + E.screenrows - 1;
+          if (E.cy > E.numrows) E.cy = E.numrows;
+        }
+
+        int times = E.screenrows;
+        while (times--)
+          editorMoveCursor(c == PAGE_UP ? ARROW_UP : ARROW_DOWN);
+      }
+      break;
+
+    // Move cursor
+    case ARROW_UP:
+    case ARROW_DOWN:
+    case ARROW_LEFT:
+    case ARROW_RIGHT:
+      editorMoveCursor(c);
+      break;
+
+    case CTRL_KEY('l'):
+    case '\x1b':
+      break;
+
+    case 73:
+    case 105:
+      E.mode = MODE_INSERT;
+      break;
+  }
+
+  quit_times = MVI_QUIT_TIMES;
+}
+
+// Waits for a keypress and then handles the key press its used to map different key 
+// combinations and special keys to different functions of the vim, and also to insert and 
+// printable keys to the edited text
+void editorProcessKeypress() {
+  int c = editorReadKey();
+
+  switch (E.mode) {
+  case MODE_INSERT:
+    editorProcessInsertKeypress(c);
+    break;
+  default:
+    editorProcessNormalKeypress(c);
+    break;
+  }
+
 }
 
 /*** init ***/
@@ -846,6 +962,7 @@ void initEditor() {
   E.filename = NULL;
   E.statusmsg[0] = '\0';
   E.statusmsg_time = 0;
+  E.mode = MODE_NORMAL;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
   E.screenrows -= 2; // So the status bar has 2 rows
