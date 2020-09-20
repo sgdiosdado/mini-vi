@@ -672,6 +672,38 @@ void editorMoveCursor(int key) {
   }
 }
 
+void quitProgram() {
+  //Uses the escape command to clear the screen
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  //puts the cursor on 
+  write(STDOUT_FILENO, "\x1b[H", 3);
+  exit(0);
+}
+
+void comandoPuntos(){
+  int isave = 0;
+  char *opcion = editorPrompt(":%s");
+  if (opcion) {
+    if (strcmp(opcion, "q") == 0) {
+      printf("Quieres guardar tus cambios?\n 1 = si, 0 = no\n");
+      scanf("%d", &isave);
+      if (isave == 1)
+      {
+        editorSave();
+        quitProgram();
+      }else
+      {
+        quitProgram();
+      }
+    } else if (strcmp(opcion, "wq") == 0) {
+      editorSave();
+      quitProgram();
+    }
+    free(opcion);
+  }
+
+}
+
 // Waits for a keypress and then handles the key press its used to map different key 
 // combinations and special keys to different functions of the vim, and also to insert and 
 // printable keys to the edited text
@@ -681,6 +713,9 @@ void editorProcessKeypress() {
   int c = editorReadKey();
 
   switch (c) {
+    case ':':
+      comandoPuntos();
+    break;
     // Enter (CR)
     case '\r':
       editorInsertNewline();
