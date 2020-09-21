@@ -1,3 +1,14 @@
+//
+//  main.c
+//  Mini Vi
+//
+//  Created on 14/09/20 by:
+//    * Sergio Diosdado
+//    * Álvaro Santana
+//    * Jesús Lozano
+//  
+//  Based on Salvatore Sanfilippo (antirez) work
+
 //macros, que exponen ciertos features
 #define _DEFAULT_SOURCE
 #define _BSD_SOURCE
